@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Snake Game</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        canvas { border: 1px solid black; }
+        #scoreboard { position: absolute; top: 10px; left: 10px; font-size: 20px; }
+        #topScores { margin-top: 20px; }
+        #topScoresList { list-style-type: none; padding: 0; }
+        #resetButton { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="scoreboard">
+        <div>Score: <span id="score">0</span></div>
+        <div>Time: <span id="time">0</span>s</div>
+        <div id="topScores">
+            <div>Top Scores:</div>
+            <ol id="topScoresList"></ol>
+            <button id="resetButton">Reset Scores</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth * 2 / 3;
+        canvas.height = window.innerHeight * 2 / 3;
+        const gridSize = 20;
+        let snake = [{ x: canvas.width / 2, y: canvas.height / 2 }];
+        let direction = 'right';
+        let food = [];
+        let score = 0;
+        let topScores = JSON.parse(localStorage.getItem('topScores')) || [];
+        let startTime;
+        let speed = 500; // 2 steps per second
+        let gameStarted = false;
+
+        function updateTopScoresList() {
+            const topScoresList = document.getElementById('topScoresList');
+            topScoresList.innerHTML = '';
+            topScores.forEach((score, index) => {
+                const li = document.createElement('li');
+                li.innerText = `${index + 1}. ${score.name} (${score.points} P, ${score.time} S)`;
+                topScoresList.appendChild(li);
+            });
+        }
+
+        updateTopScoresList();
+
+        document.getElementById('resetButton').addEventListener('click', () => {
+            topScores = [];
+            localStorage.removeItem('topScores');
+            updateTopScoresList();
+        });
+
+        for (let i = 0; i < 10; i++) {
+            food.push({ x: Math.floor(Math.random() * canvas.width / gridSize) * gridSize, y: Math.floor(Math.random() * canvas.height / gridSize) * gridSize });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'green';
+            snake.forEach(segment => ctx.fillRect(segment.x, segment.y, gridSize, gridSize));
+            ctx.fillStyle = 'red';
+            food.forEach(f => ctx.fillRect(f.x, f.y, gridSize, gridSize));
+        }
+
+        function moveSnake() {
+            const head = { x: snake[0].x, y: snake[0].y };
+            switch (direction) {
+                case 'right': head.x += gridSize; break;
+                case 'left': head.x -= gridSize; break;
+                case 'up': head.y -= gridSize; break;
+                case 'down': head.y += gridSize; break;
+            }
+            snake.unshift(head);
+            let ateFood = false;
+            food.forEach((f, index) => {
+                if (head.x < f.x + gridSize && head.x + gridSize > f.x && head.y < f.y + gridSize && head.y + gridSize > f.y) {
+                    ateFood = true;
+                    food.splice(index, 1);
+                    food.push({ x: Math.floor(Math.random() * canvas.width / gridSize) * gridSize, y: Math.floor(Math.random() * canvas.height / gridSize) * gridSize });
+                    score++;
+                    document.getElementById('score').innerText = score;
+                    speed *= 0.95; // Increase speed by 5%
+                }
+            });
+            if (!ateFood) {
+                snake.pop();
+            }
+        }
+
+        function changeDirection(event) {
+            if (!gameStarted) {
+                gameStarted = true;
+                startTime = Date.now();
+                gameLoop();
+            }
+            switch (event.key) {
+                case 'ArrowUp': if (direction !== 'down') direction = 'up'; break;
+                case 'ArrowDown': if (direction !== 'up') direction = 'down'; break;
+                case 'ArrowLeft': if (direction !== 'right') direction = 'left'; break;
+                case 'ArrowRight': if (direction !== 'left') direction = 'right'; break;
+            }
+        }
+
+        function checkCollision() {
+            const head = snake[0];
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                return true;
+            }
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        document.addEventListener('keydown', changeDirection);
+
+        function gameLoop() {
+            moveSnake();
+            if (checkCollision()) {
+                alert('Game Over');
+                const currentTime = Math.floor((Date.now() - startTime) / 1000);
+                let newEntry = { name: '', points: score, time: currentTime };
+                let insertIndex = topScores.findIndex(entry => entry.points < score || (entry.points === score && entry.time > currentTime));
+                if (insertIndex === -1 && topScores.length < 10) {
+                    insertIndex = topScores.length;
+                }
+                if (insertIndex !== -1) {
+                    newEntry.name = prompt('Neuer Rekord! Bitte gib deinen Namen ein:');
+                    topScores.splice(insertIndex, 0, newEntry);
+                    if (topScores.length > 10) {
+                        topScores.pop();
+                    }
+                    localStorage.setItem('topScores', JSON.stringify(topScores));
+                    updateTopScoresList();
+                }
+                score = 0;
+                document.getElementById('score').innerText = score;
+                snake = [{ x: canvas.width / 2, y: canvas.height / gridSize }];
+                direction = 'right';
+                food = [];
+                for (let i = 0; i < 10; i++) {
+                    food.push({ x: Math.floor(Math.random() * canvas.width / gridSize) * gridSize, y: Math.floor(Math.random() * canvas.height / gridSize) * gridSize });
+                }
+                gameStarted = false;
+                speed = 500; // Reset speed
+            }
+            draw();
+            if (gameStarted) {
+                document.getElementById('time').innerText = Math.floor((Date.now() - startTime) / 1000);
+                setTimeout(gameLoop, speed);
+            }
+        }
+
+        draw(); // Initial draw to show the starting state
+    </script>
+</body>
+</html>
